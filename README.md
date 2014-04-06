@@ -3,6 +3,12 @@ NodeManager
 
 NodeJS server manager that is able to take different actions depending on the node.js server state.
 
+What it can do so far:
+
+* log output from the NodeJS process (standard output & error output)
+* restart the NodeJS process if it crashes due to an error
+
+
 Usage:
 ---------
 
