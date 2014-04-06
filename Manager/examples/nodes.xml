@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes>
+    <node>
+        <name>Name of the node</name>
+        <path>/path/to/application.js</path>
+        <log>false</log>
+    </node>
+</nodes>
