@@ -11,18 +11,23 @@ import java.io.*;
  */
 public class NodeRunner extends Thread
 {
-    private String nodeName;
+    private NodeServer nodeServer;
+
     private ProcessBuilder processBuilder = null;
     private Process process = null;
+
     final private Logger stdLogger = new Logger();
     final private Logger errLogger = new Logger();
 
-    public NodeRunner(String name, String path, File executable)
+    public NodeRunner(NodeServer server, File executable)
     {
-        nodeName = name;
-        processBuilder = new ProcessBuilder(executable.getAbsolutePath(), new File(path).getAbsolutePath());
-        stdLogger.setFile(new File("log_" + name + ".output.txt"));
-        errLogger.setFile(new File("log_" + name + ".error.txt"));
+        nodeServer = server;
+        processBuilder = new ProcessBuilder(executable.getAbsolutePath(), server.getFile().getAbsolutePath());
+
+        if (server.isLogging()) {
+            stdLogger.setFile(new File("log_" + server.getName() + ".output.txt"));
+            errLogger.setFile(new File("log_" + server.getName() + ".error.txt"));
+        }
     }
 
     @Override
@@ -31,16 +36,17 @@ public class NodeRunner extends Thread
         // We need to do some stuff when the thread is closing
         Runtime.getRuntime().addShutdownHook(new Cleaner());
 
-        System.out.println("Starting node process: " + nodeName);
-
         startProcess();
     }
 
     private void startProcess()
     {
         try {
+            System.out.println("Starting node process: " + nodeServer.getName());
+
+            // Starting the process
             process = processBuilder.start();
-            handleOutput(process.getInputStream());
+            handleStdOutput(process.getInputStream());
             handleErrorOutput(process.getErrorStream());
             process.waitFor();
         } catch (IOException e) {
@@ -48,10 +54,11 @@ public class NodeRunner extends Thread
             e.printStackTrace();
         } catch (InterruptedException e) {
             e.printStackTrace();
+            errLogger.log("Process was interrupted unexpectedly because: " + e.getMessage());
         }
     }
 
-    private void handleOutput(InputStream inputStream)
+    private void handleStdOutput(InputStream inputStream)
     {
         synchronized (stdLogger) {
             handleOutput(stdLogger, inputStream, false);
@@ -78,6 +85,7 @@ public class NodeRunner extends Thread
                 }
 
                 logger.log(line);
+
                 line = reader.readLine();
             }
         } catch (IOException e) {
@@ -85,7 +93,7 @@ public class NodeRunner extends Thread
         }
 
         if (errorHandler && errorOccurred) {
-            System.out.println("An error occurred. Restarting the node process: " + nodeName);
+            System.out.println("An error occurred. Restarting the node process: " + nodeServer.getName());
             stdLogger.flush();
             errLogger.flush();
             startProcess();
@@ -94,13 +102,20 @@ public class NodeRunner extends Thread
 
     private boolean hasErrorOccurred(String line)
     {
-        boolean result = false;
+        return line.contains("Error:");
+    }
 
-        if (line.contains("Error:")) {
-            result = true;
+    public void terminate()
+    {
+        process.destroy();
+
+        synchronized (stdLogger) {
+            stdLogger.close();
         }
 
-        return result;
+        synchronized (errLogger) {
+            errLogger.close();
+        }
     }
 
     private class Cleaner extends Thread
@@ -108,17 +123,8 @@ public class NodeRunner extends Thread
         @Override
         public void run()
         {
-            System.out.println("Cleaning up");
-
-            process.destroy();
-
-            synchronized (stdLogger) {
-                stdLogger.close();
-            }
-
-            synchronized (errLogger) {
-                errLogger.close();
-            }
+            System.out.println("Cleaning up runner for " + nodeServer.getName());
+            terminate();
         }
     }
 }

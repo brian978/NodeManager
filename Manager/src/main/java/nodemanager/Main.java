@@ -1,6 +1,8 @@
 package nodemanager;
 
 import com.acamar.util.Properties;
+import com.acamar.util.StringUtil;
+import nodemanager.node.NodeServer;
 import nodemanager.node.NodeRunner;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -14,7 +16,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.Vector;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 
 /**
  * NodeManager
@@ -29,6 +33,7 @@ public class Main
     File config = new File("nodes.xml");
     Document xmlConfig = null;
     ExecutableResolver executableResolver = new ExecutableResolver();
+    ArrayList<NodeRunner> nodeRunners = new ArrayList<>();
 
     public static void main(String[] args)
     {
@@ -56,27 +61,53 @@ public class Main
 
                 NodeList nodeList = xmlConfig.getFirstChild().getChildNodes();
                 Node node;
-                String nodeName, nodePath;
+                NodeList nodeConfig;
+                String domNodeName, methodName;
                 NodeRunner nodeRunner;
+                NodeServer nodeServer;
+                Method classMethod;
 
                 for (int i = 0; i < nodeList.getLength(); i++) {
                     node = nodeList.item(i);
 
                     // We only care about node elements (not texts)
                     if (node.getNodeType() == Node.ELEMENT_NODE) {
-                        // Getting the node.js app name
-                        node = node.getFirstChild().getNextSibling();
-                        nodeName = node.getTextContent();
+                        nodeConfig = node.getChildNodes();
+                        nodeServer = new NodeServer();
 
-                        // Getting the node.js app path
-                        node = node.getNextSibling().getNextSibling();
-                        nodePath = node.getTextContent();
+                        for (int j = 0; j < nodeConfig.getLength(); j++) {
+                            node = nodeConfig.item(j);
+
+                            // We only care about node elements (not texts)
+                            if (node.getNodeType() == Node.ELEMENT_NODE) {
+                                domNodeName = node.getNodeName();
+
+                                try {
+                                    methodName = "set" + StringUtil.ucFirst(domNodeName);
+                                    classMethod = NodeServer.class.getMethod(methodName, String.class);
+                                } catch (NoSuchMethodException e) {
+                                    classMethod = null;
+                                    e.printStackTrace();
+                                }
+
+                                if(classMethod != null) {
+                                    try {
+                                        classMethod.invoke(nodeServer, node.getTextContent());
+                                    } catch (IllegalAccessException | InvocationTargetException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            }
+                        }
 
                         // Configuring the node runner object
-                        nodeRunner = new NodeRunner(nodeName, nodePath, nodeExecutable);
+                        nodeRunner = new NodeRunner(nodeServer, nodeExecutable);
 
                         // Starting the thread
                         new Thread(nodeRunner).start();
+
+                        // Tracking the runner
+                        nodeRunners.add(nodeRunner);
                     }
                 }
             } else {
@@ -100,9 +131,10 @@ public class Main
         }
 
         if (nodeExecutable == null || !nodeExecutable.exists()) {
-            // Trying to find the node.js executable
+            // Trying to find the node.js executable without asking the user
             nodeExecutable = executableResolver.getFile();
 
+            // Last resort
             // Prompting the user for the executable is not found
             if(nodeExecutable == null) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));

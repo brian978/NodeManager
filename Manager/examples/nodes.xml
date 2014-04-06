@@ -3,6 +3,6 @@
     <node>
         <name>Name of the node</name>
         <path>/path/to/application.js</path>
-        <log>false</log>
+        <logging>false</logging>
     </node>
 </nodes>

@@ -15,7 +15,6 @@ import java.util.Vector;
  */
 public class ExecutableResolver
 {
-    private String osName = System.getProperty("os.name");
     File executable = null;
 
     public Vector<String> getPaths()
